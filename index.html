@@ -18,6 +18,7 @@
 <body>
 <h1>TV launcher probe</h1>
 <div id="status">Loaded. Use the arrows and OK to try a launch method.</div>
+<div id="keys" style="font-size:40px;color:#fdd663;margin-top:16px">Keys received: none yet</div>
 <div class="row" id="buttons"></div>
 <pre id="out"></pre>
 <script>
@@ -68,6 +69,21 @@ function run(i) {
   document.getElementById('status').textContent = 'Trying ' + (i + 1) + '. ' + methods[i][0] + ' ...';
   try { methods[i][1](); } catch (e) { document.getElementById('status').textContent = 'Method ' + (i + 1) + ' threw: ' + e; }
 }
+
+// Diagnostic: show every key event the page gets, and where focus is.
+var keyLog = [];
+['keydown', 'keyup', 'keypress'].forEach(function (type) {
+  window.addEventListener(type, function (e) {
+    keyLog.unshift(type + ' ' + e.keyCode + (e.key ? ' "' + e.key + '"' : ''));
+    keyLog.length = Math.min(keyLog.length, 6);
+    document.getElementById('keys').textContent = 'Keys received: ' + keyLog.join('  |  ');
+  }, true);
+});
+setInterval(function () {
+  var a = document.activeElement;
+  document.getElementById('status').textContent = 'hasFocus=' + document.hasFocus() +
+    '  active=' + (a ? a.tagName + ' ' + (a.textContent || '').slice(0, 20) : 'none');
+}, 1000);
 
 document.addEventListener('keydown', function (e) {
   var at = buttons.indexOf(document.activeElement);
