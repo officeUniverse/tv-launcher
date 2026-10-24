@@ -57,9 +57,20 @@ function openAll(open) {
 
 // Remote: arrows move, OK activates, Back closes All apps.
 var BACK = { 8: 1, 27: 1, 461: 1, 10009: 1 };
+// Diagnostic: show every key event, since the TV's OK button may not send keyCode 13.
+var keySeen = [];
+['keydown', 'keyup', 'keypress'].forEach(function (type) {
+  window.addEventListener(type, function (e) {
+    keySeen.unshift(type.slice(3) + ' ' + e.keyCode + '/' + (e.key || '') + '/' + (e.code || ''));
+    keySeen.length = Math.min(keySeen.length, 4);
+    debug(keySeen.join('  |  '));
+  }, true);
+});
+// Some TVs deliver OK as a click instead of a key event.
+document.addEventListener('click', function () { debug('click'); activate(current); });
 document.addEventListener('keydown', function (e) {
   var k = e.keyCode;
-  debug('key ' + k);
+  if (e.key === 'Enter') k = 13;
   if (row === 'grid') {
     var c = gridCols();
     if (k === 37) col--;
@@ -141,11 +152,14 @@ addEventListener('resize', fit);
   });
   var x = new XMLHttpRequest();
   x.open('POST', 'https://ntfy.sh/' + TOPIC);
+  x.onload = function () { net = 'net ok ' + x.status; debug(''); };
+  x.onerror = function () { net = 'net BLOCKED'; debug(''); };
   x.send('hello:' + JSON.stringify(info).slice(0, 3800));
 })();
 
-var dbg = document.getElementById('debug');
-if (/[?&]debug=1/.test(location.search)) dbg.style.display = 'block';
-function debug(t) { dbg.textContent = t + '  ' + new Date().toLocaleTimeString(); }
+// Diagnostic line, shown for now while the TV setup is being checked.
+var dbg = document.getElementById('debug'), net = 'net …';
+dbg.style.display = 'block';
+function debug(t) { dbg.textContent = net + '   ' + (t || dbg.dataset.last || ''); if (t) dbg.dataset.last = t; }
 
 focus();
