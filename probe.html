@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1920, height=1080">
+<title>TV Launcher Probe</title>
+<style>
+  html, body { margin: 0; background: #0e1116; color: #e8eaed; font: 18px/1.3 system-ui, sans-serif; }
+  body { padding: 24px 36px; }
+  h1 { font-size: 26px; margin: 0 0 8px; }
+  .row { display: flex; gap: 12px; margin: 12px 0; flex-wrap: wrap; }
+  button { font: inherit; padding: 8px 16px; border-radius: 10px; border: 2px solid #3a414d; background: #1b2029; color: inherit; }
+  button:focus { outline: none; border-color: #8ab4f8; background: #263244; }
+  pre { font-size: 16px; white-space: pre-wrap; background: #161a21; padding: 14px; border-radius: 10px; margin: 0 0 10px; }
+  #status { color: #8ab4f8; }
+</style>
+</head>
+<body>
+<h1>TV launcher probe</h1>
+<pre id="out"></pre>
+<div id="status">Loaded. Use the arrows and OK to try a launch method.</div>
+<div id="keys" style="color:#fdd663">Keys received: none yet</div>
+<div id="plat" style="color:#f28b82">Platform events: none yet</div>
+<div id="result"></div>
+<div class="row" id="buttons"></div>
+<script>
+// Each method tries to open an app. ?m=N runs method N automatically after 3 s,
+// so a remote observer can tell which one works by watching the TV's state.
+var NETFLIX = 'netflix';
+var YOUTUBE = 'pkgapp://tv.vidaa.app.youtube/apps/start_youtube.sh';
+var methods = [
+  ['href netflix', function () { location.href = NETFLIX; }],
+  ['href youtube', function () { location.href = YOUTUBE; }],
+  ['open netflix', function () { window.open(NETFLIX); }],
+  ['open youtube', function () { window.open(YOUTUBE); }]
+];
+
+// Every global the TV injects: compare against a clean iframe's window.
+var frame = document.createElement('iframe');
+frame.style.display = 'none';
+document.body.appendChild(frame);
+var stock = {};
+Object.getOwnPropertyNames(frame.contentWindow).forEach(function (k) { stock[k] = 1; });
+var injected = Object.getOwnPropertyNames(window).filter(function (k) {
+  return !stock[k] && !/^(methods|NETFLIX|YOUTUBE|frame|stock|injected|getters|actions|platformEvents|row|buttons|run|keyLog|auto)$/.test(k);
+}).sort();
+// Getters are numerous and unimportant here; list everything else.
+var getters = injected.filter(function (n) { return /^Hisense_Get/.test(n); }).length;
+var actions = injected.filter(function (n) { return !/^Hisense_Get/.test(n); });
+
+// Remote keys may arrive as platform events instead of DOM key events.
+var platformEvents = [];
+try {
+  omi_platform.addPlatformEventListener(function () {
+    var a = [].slice.call(arguments).map(function (x) { return typeof x === 'string' ? x : JSON.stringify(x); });
+    platformEvents.unshift(a.join(' ').slice(0, 160));
+    platformEvents.length = Math.min(platformEvents.length, 4);
+    document.getElementById('plat').textContent = 'Platform events: ' + platformEvents.join('  |  ');
+  });
+} catch (e) { platformEvents.push('listener error ' + e); }
+
+document.getElementById('out').textContent =
+  'Opened at: ' + location.href + '\ninstallApp: ' + (typeof window.Hisense_installApp) +
+  '   installApp_V2: ' + (typeof window.Hisense_installApp_V2) + '   HiUtils_createRequest: ' + (typeof window.HiUtils_createRequest) +
+  '\n\nTV globals (' + actions.length + ' + ' + getters + ' Hisense_Get*): ' + actions.join(', ') +
+  '\n\nScreen: ' + screen.width + 'x' + screen.height + '  Window: ' + innerWidth + 'x' + innerHeight;
+
+var row = document.getElementById('buttons');
+var buttons = methods.map(function (m, i) {
+  var b = document.createElement('button');
+  b.textContent = (i + 1) + '. ' + m[0];
+  b.onclick = function () { run(i); };
+  row.appendChild(b);
+  return b;
+});
+buttons[0].focus();
+
+function run(i) {
+  var r = document.getElementById('result');
+  r.textContent = 'Trying ' + (i + 1) + '. ' + methods[i][0] + ' ...';
+  try { methods[i][1](); } catch (e) { r.textContent = 'Method ' + (i + 1) + ' threw: ' + e; }
+}
+
+// Diagnostic: show every key event the page gets, and where focus is.
+var keyLog = [];
+['keydown', 'keyup', 'keypress'].forEach(function (type) {
+  window.addEventListener(type, function (e) {
+    keyLog.unshift(type + ' ' + e.keyCode + (e.key ? ' "' + e.key + '"' : ''));
+    keyLog.length = Math.min(keyLog.length, 6);
+    document.getElementById('keys').textContent = 'Keys received: ' + keyLog.join('  |  ');
+  }, true);
+});
+setInterval(function () {
+  var a = document.activeElement;
+  document.getElementById('status').textContent = 'hasFocus=' + document.hasFocus() +
+    '  active=' + (a ? a.tagName + ' ' + (a.textContent || '').slice(0, 20) : 'none');
+}, 1000);
+
+document.addEventListener('keydown', function (e) {
+  var at = buttons.indexOf(document.activeElement);
+  if (e.keyCode === 39) buttons[Math.min(at + 1, buttons.length - 1)].focus();
+  if (e.keyCode === 37) buttons[Math.max(at - 1, 0)].focus();
+  if (e.keyCode === 13 && at >= 0) { e.preventDefault(); run(at); }
+});
+
+// ?kb=1: send text to connected remote apps, to test it as a page -> Mac channel.
+if (/[?&]kb=[12]/.test(location.search)) {
+  if (/[?&]kb=2/.test(location.search)) {
+    // Variant: focus a text box and enable the virtual keyboard first.
+    var box = document.createElement('input');
+    document.body.appendChild(box);
+    box.focus();
+    try { document.getElementById('plat').textContent = 'enableVKB -> ' + Hisense_enableVKB(); } catch (e) {}
+  }
+  var sent = 0, kbTimer = setInterval(function () {
+    var r;
+    try { r = Hisense_SetRemoteKeyboard('tvlauncher:ping' + (++sent)); } catch (e) { r = 'threw ' + e; }
+    document.getElementById('result').textContent = 'SetRemoteKeyboard #' + sent + ' -> ' + r;
+    if (sent >= 5) clearInterval(kbTimer);
+  }, 2000);
+}
+
+var auto = /[?&]m=(\d+)/.exec(location.search);
+if (auto) setTimeout(function () { run(+auto[1] - 1); }, 3000);
+</script>
+</body>
+</html>

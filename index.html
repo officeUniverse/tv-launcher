@@ -2,126 +2,209 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=1920, height=1080">
-<title>TV Launcher Probe</title>
+<meta name="viewport" content="width=1280, height=720">
+<title>Home</title>
 <style>
-  html, body { margin: 0; background: #0e1116; color: #e8eaed; font: 18px/1.3 system-ui, sans-serif; }
-  body { padding: 24px 36px; }
-  h1 { font-size: 26px; margin: 0 0 8px; }
-  .row { display: flex; gap: 12px; margin: 12px 0; flex-wrap: wrap; }
-  button { font: inherit; padding: 8px 16px; border-radius: 10px; border: 2px solid #3a414d; background: #1b2029; color: inherit; }
-  button:focus { outline: none; border-color: #8ab4f8; background: #263244; }
-  pre { font-size: 16px; white-space: pre-wrap; background: #161a21; padding: 14px; border-radius: 10px; margin: 0 0 10px; }
-  #status { color: #8ab4f8; }
+  @font-face { font-family: Manrope; src: url(assets/fonts/manrope.woff2) format('woff2'); font-weight: 200 800; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0d10; }
+  body { font-family: Manrope, system-ui, sans-serif; color: #fff; -webkit-font-smoothing: antialiased; }
+
+  /* Fixed 1280x720 stage (the TV's page size), scaled to fit other screens. */
+  #stage { position: absolute; left: 50%; top: 50%; width: 1280px; height: 720px; margin: -360px 0 0 -640px;
+           background: url(assets/wallpapers/cove-field-clear.jpg) center / 1280px 720px; overflow: hidden; }
+  #stage::before { content: ''; position: absolute; inset: 0; height: 160px;
+                   background: linear-gradient(rgba(0,0,0,.28), rgba(0,0,0,0)); }
+
+  #clock { position: absolute; left: 92px; top: 34px; font-size: 32px; font-weight: 500; letter-spacing: .5px;
+           text-shadow: 0 1px 8px rgba(0,0,0,.25); }
+
+  #top { position: absolute; right: 84px; top: 36px; display: flex; gap: 10px; }
+  .pill { display: flex; align-items: center; gap: 9px; padding: 8px 14px; border-radius: 12px;
+          font-size: 19px; font-weight: 500; text-shadow: 0 1px 6px rgba(0,0,0,.3); }
+  .pill img { width: 20px; height: 20px; }
+
+  /* Frosted dock: a pre-blurred copy of the wallpaper, aligned to the stage. */
+  #dock { position: absolute; left: 141px; top: 456px; width: 1007px; height: 157px; box-sizing: border-box;
+          padding: 8px; display: flex; gap: 4px; border-radius: 24px; overflow: hidden;
+          background: linear-gradient(rgba(28,32,36,.34), rgba(28,32,36,.34)),
+                      url(assets/wallpapers/cove-field-blur.jpg) -141px -456px / 1280px 720px;
+          box-shadow: inset 0 0 0 1px rgba(255,255,255,.10); }
+  .tile { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+          border-radius: 16px; font-size: 21px; font-weight: 500; }
+  .tile img { height: 40px; max-width: 120px; }
+
+  .tile.focus, .pill.focus { background: rgba(255,255,255,.20); box-shadow: inset 0 0 0 1px rgba(255,255,255,.18); }
+
+  #toast { position: absolute; left: 50%; bottom: 40px; transform: translateX(-50%); padding: 10px 18px;
+           border-radius: 12px; background: rgba(20,22,26,.72); font-size: 17px; opacity: 0; transition: opacity .2s; }
+  #toast.show { opacity: 1; }
+
+  /* All apps */
+  #all { position: absolute; inset: 0; display: none; background: rgba(10,12,16,.86); }
+  #all.open { display: block; }
+  #all h2 { margin: 34px 92px 18px; font-size: 26px; font-weight: 600; }
+  #grid { position: absolute; left: 92px; right: 92px; top: 92px; bottom: 30px; overflow: hidden;
+          display: flex; flex-wrap: wrap; align-content: flex-start; gap: 16px 16px; }
+  .app { width: 168px; text-align: center; font-size: 14px; border-radius: 12px; padding: 6px; box-sizing: border-box; }
+  .app img { width: 156px; height: 88px; object-fit: cover; border-radius: 8px; display: block; background: #1d2128; }
+  .app span { display: block; margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: .85; }
+  .app.focus { background: rgba(255,255,255,.18); }
+
+  #debug { position: absolute; left: 8px; bottom: 6px; font: 12px monospace; color: #fdd663; display: none; }
 </style>
 </head>
 <body>
-<h1>TV launcher probe</h1>
-<pre id="out"></pre>
-<div id="status">Loaded. Use the arrows and OK to try a launch method.</div>
-<div id="keys" style="color:#fdd663">Keys received: none yet</div>
-<div id="plat" style="color:#f28b82">Platform events: none yet</div>
-<div id="result"></div>
-<div class="row" id="buttons"></div>
+<div id="stage">
+  <div id="clock"></div>
+  <div id="top">
+    <div class="pill" data-cmd="all"><img src="assets/icons/apps.svg" alt="">All apps</div>
+    <div class="pill" data-cmd="key:MENU"><img src="assets/icons/settings.svg" alt="">Settings</div>
+  </div>
+  <div id="dock"></div>
+  <div id="toast"></div>
+  <div id="all"><h2>All apps</h2><div id="grid"></div></div>
+  <div id="debug"></div>
+</div>
+<script src="apps.js"></script>
 <script>
-// Each method tries to open an app. ?m=N runs method N automatically after 3 s,
-// so a remote observer can tell which one works by watching the TV's state.
-var NETFLIX = 'netflix';
-var YOUTUBE = 'pkgapp://tv.vidaa.app.youtube/apps/start_youtube.sh';
-var methods = [
-  ['href netflix', function () { location.href = NETFLIX; }],
-  ['href youtube', function () { location.href = YOUTUBE; }],
-  ['open netflix', function () { window.open(NETFLIX); }],
-  ['open youtube', function () { window.open(YOUTUBE); }]
+// Tile presses go to ntfy.sh; bridge.py on the Mac opens the app and acks on TOPIC-ack.
+var TOPIC = 'tvl-cb2547f08fc89ed93bf18ce1';
+var DOCK = [
+  ['Netflix', 'netflix', '1'], ['YouTube', 'youtube', '3'], ['Disney+', 'disneyplus', '295'],
+  ['Prime Video', 'primevideo', '2'], ['Apple TV', 'appletv', '351']
 ];
 
-// Every global the TV injects: compare against a clean iframe's window.
-var frame = document.createElement('iframe');
-frame.style.display = 'none';
-document.body.appendChild(frame);
-var stock = {};
-Object.getOwnPropertyNames(frame.contentWindow).forEach(function (k) { stock[k] = 1; });
-var injected = Object.getOwnPropertyNames(window).filter(function (k) {
-  return !stock[k] && !/^(methods|NETFLIX|YOUTUBE|frame|stock|injected|getters|actions|platformEvents|row|buttons|run|keyLog|auto)$/.test(k);
-}).sort();
-// Getters are numerous and unimportant here; list everything else.
-var getters = injected.filter(function (n) { return /^Hisense_Get/.test(n); }).length;
-var actions = injected.filter(function (n) { return !/^Hisense_Get/.test(n); });
-
-// Remote keys may arrive as platform events instead of DOM key events.
-var platformEvents = [];
-try {
-  omi_platform.addPlatformEventListener(function () {
-    var a = [].slice.call(arguments).map(function (x) { return typeof x === 'string' ? x : JSON.stringify(x); });
-    platformEvents.unshift(a.join(' ').slice(0, 160));
-    platformEvents.length = Math.min(platformEvents.length, 4);
-    document.getElementById('plat').textContent = 'Platform events: ' + platformEvents.join('  |  ');
-  });
-} catch (e) { platformEvents.push('listener error ' + e); }
-
-document.getElementById('out').textContent =
-  'Opened at: ' + location.href + '\ninstallApp: ' + (typeof window.Hisense_installApp) +
-  '   installApp_V2: ' + (typeof window.Hisense_installApp_V2) + '   HiUtils_createRequest: ' + (typeof window.HiUtils_createRequest) +
-  '\n\nTV globals (' + actions.length + ' + ' + getters + ' Hisense_Get*): ' + actions.join(', ') +
-  '\n\nScreen: ' + screen.width + 'x' + screen.height + '  Window: ' + innerWidth + 'x' + innerHeight;
-
-var row = document.getElementById('buttons');
-var buttons = methods.map(function (m, i) {
-  var b = document.createElement('button');
-  b.textContent = (i + 1) + '. ' + m[0];
-  b.onclick = function () { run(i); };
-  row.appendChild(b);
-  return b;
+var dock = document.getElementById('dock');
+var tiles = DOCK.map(function (d) {
+  var el = document.createElement('div');
+  el.className = 'tile';
+  el.dataset.cmd = 'app:' + d[2];
+  el.dataset.name = d[0];
+  el.innerHTML = '<img src="assets/icons/' + d[1] + '.svg" alt=""><div>' + d[0] + '</div>';
+  dock.appendChild(el);
+  return el;
 });
-buttons[0].focus();
+var pills = [].slice.call(document.querySelectorAll('.pill'));
 
-function run(i) {
-  var r = document.getElementById('result');
-  r.textContent = 'Trying ' + (i + 1) + '. ' + methods[i][0] + ' ...';
-  try { methods[i][1](); } catch (e) { r.textContent = 'Method ' + (i + 1) + ' threw: ' + e; }
+var grid = document.getElementById('grid');
+var apps = (window.ALL_APPS || []).map(function (a) {
+  var el = document.createElement('div');
+  el.className = 'app';
+  el.dataset.cmd = 'app:' + a.id;
+  el.dataset.name = a.name;
+  el.innerHTML = '<img src="' + a.icon + '" alt=""><span></span>';
+  el.lastChild.textContent = a.name;
+  grid.appendChild(el);
+  return el;
+});
+
+// Focus model: one row each for the top pills and the dock, a grid for All apps.
+var row = 'dock', col = 0, current = null;
+function list() { return row === 'top' ? pills : row === 'dock' ? tiles : apps; }
+function focus() {
+  if (current) current.classList.remove('focus');
+  var l = list();
+  col = Math.max(0, Math.min(col, l.length - 1));
+  current = l[col];
+  current.classList.add('focus');
+  if (row === 'grid') current.scrollIntoView({ block: 'nearest' });
 }
 
-// Diagnostic: show every key event the page gets, and where focus is.
-var keyLog = [];
-['keydown', 'keyup', 'keypress'].forEach(function (type) {
-  window.addEventListener(type, function (e) {
-    keyLog.unshift(type + ' ' + e.keyCode + (e.key ? ' "' + e.key + '"' : ''));
-    keyLog.length = Math.min(keyLog.length, 6);
-    document.getElementById('keys').textContent = 'Keys received: ' + keyLog.join('  |  ');
-  }, true);
-});
-setInterval(function () {
-  var a = document.activeElement;
-  document.getElementById('status').textContent = 'hasFocus=' + document.hasFocus() +
-    '  active=' + (a ? a.tagName + ' ' + (a.textContent || '').slice(0, 20) : 'none');
-}, 1000);
+function gridCols() {
+  var first = apps[0] && apps[0].offsetTop, n = 0;
+  while (n < apps.length && apps[n].offsetTop === first) n++;
+  return n || 1;
+}
 
+var all = document.getElementById('all');
+function openAll(open) {
+  all.classList.toggle('open', open);
+  row = open ? 'grid' : 'dock';
+  col = 0;
+  focus();
+}
+
+// Remote: arrows move, OK activates, Back closes All apps.
+var BACK = { 8: 1, 27: 1, 461: 1, 10009: 1 };
 document.addEventListener('keydown', function (e) {
-  var at = buttons.indexOf(document.activeElement);
-  if (e.keyCode === 39) buttons[Math.min(at + 1, buttons.length - 1)].focus();
-  if (e.keyCode === 37) buttons[Math.max(at - 1, 0)].focus();
-  if (e.keyCode === 13 && at >= 0) { e.preventDefault(); run(at); }
+  var k = e.keyCode;
+  debug('key ' + k);
+  if (row === 'grid') {
+    var c = gridCols();
+    if (k === 37) col--;
+    else if (k === 39) col++;
+    else if (k === 38) col -= c;
+    else if (k === 40) col += c;
+    else if (k === 13) activate(current);
+    else if (BACK[k]) openAll(false);
+    else return;
+  } else {
+    if (k === 37) col--;
+    else if (k === 39) col++;
+    else if (k === 38 && row === 'dock') { row = 'top'; col = pills.length - 1; }
+    else if (k === 40 && row === 'top') { row = 'dock'; col = 0; }
+    else if (k === 13) activate(current);
+    else return;
+  }
+  e.preventDefault();
+  focus();
 });
 
-// ?kb=1: send text to connected remote apps, to test it as a page -> Mac channel.
-if (/[?&]kb=[12]/.test(location.search)) {
-  if (/[?&]kb=2/.test(location.search)) {
-    // Variant: focus a text box and enable the virtual keyboard first.
-    var box = document.createElement('input');
-    document.body.appendChild(box);
-    box.focus();
-    try { document.getElementById('plat').textContent = 'enableVKB -> ' + Hisense_enableVKB(); } catch (e) {}
-  }
-  var sent = 0, kbTimer = setInterval(function () {
-    var r;
-    try { r = Hisense_SetRemoteKeyboard('tvlauncher:ping' + (++sent)); } catch (e) { r = 'threw ' + e; }
-    document.getElementById('result').textContent = 'SetRemoteKeyboard #' + sent + ' -> ' + r;
-    if (sent >= 5) clearInterval(kbTimer);
-  }, 2000);
+function activate(el) {
+  var cmd = el.dataset.cmd;
+  if (cmd === 'all') return openAll(true);
+  send(cmd, el.dataset.name || el.textContent.trim());
 }
 
-var auto = /[?&]m=(\d+)/.exec(location.search);
-if (auto) setTimeout(function () { run(+auto[1] - 1); }, 3000);
+// Send a command and report back: the Mac acks within a second or two when it is on.
+var toast = document.getElementById('toast'), toastTimer, waiting = null;
+function say(text, ms) {
+  toast.textContent = text;
+  toast.classList.add('show');
+  clearTimeout(toastTimer);
+  if (ms) toastTimer = setTimeout(function () { toast.classList.remove('show'); }, ms);
+}
+function send(cmd, label) {
+  say('Opening ' + label + '…');
+  clearTimeout(waiting);
+  waiting = setTimeout(function () { say('No answer from your Mac. Is it on?', 6000); }, 6000);
+  var x = new XMLHttpRequest();
+  x.open('POST', 'https://ntfy.sh/' + TOPIC);
+  x.onerror = function () { clearTimeout(waiting); say('No internet connection', 5000); };
+  x.send(cmd);
+}
+try {
+  var acks = new EventSource('https://ntfy.sh/' + TOPIC + '-ack/sse');
+  acks.onmessage = function (e) {
+    var m = JSON.parse(e.data);
+    if (m.event !== 'message' || !waiting) return;
+    clearTimeout(waiting);
+    waiting = null;
+    if (m.message.indexOf('ok:') === 0) say('Opening…', 2500);
+    else say('Couldn’t do that (' + m.message.slice(4) + ')', 5000);
+  };
+} catch (e) { debug('no EventSource: ' + e); }
+
+function tick() {
+  var d = new Date();
+  document.getElementById('clock').textContent = d.getHours() + ':' + ('0' + d.getMinutes()).slice(-2);
+}
+tick();
+setInterval(tick, 5000);
+
+// Scale the 1280x720 stage to fit non-TV screens (scale is 1 on the TV).
+function fit() {
+  var s = Math.min(innerWidth / 1280, innerHeight / 720);
+  document.getElementById('stage').style.transform = s === 1 ? '' : 'scale(' + s + ')';
+}
+fit();
+addEventListener('resize', fit);
+
+var dbg = document.getElementById('debug');
+if (/[?&]debug=1/.test(location.search)) dbg.style.display = 'block';
+function debug(t) { dbg.textContent = t + '  ' + new Date().toLocaleTimeString(); }
+
+focus();
 </script>
 </body>
 </html>
