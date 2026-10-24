@@ -43,15 +43,15 @@ found.sort();
  'Hisense_GetModelName', 'Hisense_GetFirmWareVersion', 'Hisense_GetDeviceID'].forEach(function (n) {
   if (typeof window[n] !== 'undefined' && found.indexOf(n + ' : ' + typeof window[n]) < 0) found.push(n + ' : ' + typeof window[n]);
 });
-found.forEach(function (n) {
-  var name = n.split(' : ')[0];
-  if (/^Hisense_Get/.test(name) && typeof window[name] === 'function') {
-    try { found.push('  ' + name + '() = ' + window[name]()); } catch (e) { found.push('  ' + name + '() threw ' + e); }
-  }
-});
+// Getters are numerous and unimportant here; list only the action functions.
+var names = found.map(function (n) { return n.split(' : ')[0]; });
+var actions = names.filter(function (n) { return !/^Hisense_Get/.test(n); });
+var getters = names.length - actions.length;
 
 document.getElementById('out').textContent =
-  'TV functions found:\n  ' + (found.length ? found.join('\n  ') : '(none)') +
+  'installApp: ' + (typeof window.Hisense_installApp) + '   launchApp: ' + (typeof window.Hisense_launchApp) +
+  '\n\nAction functions (' + actions.length + '):\n' + actions.join(', ') +
+  '\n\n(+ ' + getters + ' Hisense_Get* functions)' +
   '\n\nUser agent:\n  ' + navigator.userAgent +
   '\n\nScreen: ' + screen.width + 'x' + screen.height + '  Window: ' + innerWidth + 'x' + innerHeight;
 
