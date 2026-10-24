@@ -48,10 +48,30 @@ var names = found.map(function (n) { return n.split(' : ')[0]; });
 var actions = names.filter(function (n) { return !/^Hisense_Get/.test(n); });
 var getters = names.length - actions.length;
 
+// Look inside the objects that may be VIDAA's native bridge.
+function members(name) {
+  var o = window[name], out = [];
+  if (o === null || o === undefined) return name + ': ' + o;
+  if (typeof o === 'function') {
+    var src = String(o).replace(/\s+/g, ' ');
+    out.push('fn ' + src.slice(0, 240));
+  }
+  var seen = {};
+  for (var p = o; p && p !== Object.prototype && p !== Function.prototype; p = Object.getPrototypeOf(p)) {
+    Object.getOwnPropertyNames(p).forEach(function (k) {
+      if (seen[k] || k === 'constructor' || k === 'prototype' || k === 'length' || k === 'name') return;
+      seen[k] = 1;
+      var t; try { t = typeof o[k]; } catch (e) { t = 'err'; }
+      out.push(k + (t === 'function' ? '()' : ':' + t));
+    });
+  }
+  return name + ' -> ' + (out.length ? out.join(', ') : '(no members)');
+}
+
 document.getElementById('out').textContent =
-  'installApp: ' + (typeof window.Hisense_installApp) + '   launchApp: ' + (typeof window.Hisense_launchApp) +
-  '\n\nAction functions (' + actions.length + '):\n' + actions.join(', ') +
-  '\n\n(+ ' + getters + ' Hisense_Get* functions)' +
+  members('omi_platform') + '\n\n' + members('Hisense') + '\n\n' + members('CSLaunchCallback') +
+  '\n\n' + members('Hisense_SupportAppConfig') + '\n\n' + members('Hisense_SetRemoteKeyboard') +
+  '\n\n(' + actions.length + ' action + ' + getters + ' Hisense_Get* functions)' +
   '\n\nUser agent:\n  ' + navigator.userAgent +
   '\n\nScreen: ' + screen.width + 'x' + screen.height + '  Window: ' + innerWidth + 'x' + innerHeight;
 
