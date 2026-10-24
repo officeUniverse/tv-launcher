@@ -200,6 +200,19 @@ function fit() {
 fit();
 addEventListener('resize', fit);
 
+// Once per load, tell the Mac how the TV opened this page, so it can reopen it.
+(function hello() {
+  var info = { href: location.href, ref: document.referrer, name: window.name, hist: history.length };
+  Object.getOwnPropertyNames(window).forEach(function (k) {
+    if (/^Hisense_Get.*(App|Id|Url|URL|Launch|Channel|Source|Page)/.test(k)) {
+      try { info[k.slice(11)] = String(window[k]()).slice(0, 200); } catch (e) {}
+    }
+  });
+  var x = new XMLHttpRequest();
+  x.open('POST', 'https://ntfy.sh/' + TOPIC);
+  x.send('hello:' + JSON.stringify(info).slice(0, 3800));
+})();
+
 var dbg = document.getElementById('debug');
 if (/[?&]debug=1/.test(location.search)) dbg.style.display = 'block';
 function debug(t) { dbg.textContent = t + '  ' + new Date().toLocaleTimeString(); }
