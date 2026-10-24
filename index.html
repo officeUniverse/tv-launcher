@@ -103,6 +103,16 @@ document.addEventListener('keydown', function (e) {
   if (e.keyCode === 13 && at >= 0) { e.preventDefault(); run(at); }
 });
 
+// ?kb=1: send text to connected remote apps, to test it as a page -> Mac channel.
+if (/[?&]kb=1/.test(location.search)) {
+  var sent = 0, kbTimer = setInterval(function () {
+    var r;
+    try { r = Hisense_SetRemoteKeyboard('tvlauncher:ping' + (++sent)); } catch (e) { r = 'threw ' + e; }
+    document.getElementById('result').textContent = 'SetRemoteKeyboard #' + sent + ' -> ' + r;
+    if (sent >= 5) clearInterval(kbTimer);
+  }, 2000);
+}
+
 var auto = /[?&]m=(\d+)/.exec(location.search);
 if (auto) setTimeout(function () { run(+auto[1] - 1); }, 3000);
 </script>
