@@ -20,6 +20,8 @@
 <pre id="out"></pre>
 <div id="status">Loaded. Use the arrows and OK to try a launch method.</div>
 <div id="keys" style="color:#fdd663">Keys received: none yet</div>
+<div id="plat" style="color:#f28b82">Platform events: none yet</div>
+<div id="result"></div>
 <div class="row" id="buttons"></div>
 <script>
 // Each method tries to open an app. ?m=N runs method N automatically after 3 s,
@@ -33,49 +35,18 @@ var methods = [
   ['open youtube', function () { window.open(YOUTUBE); }]
 ];
 
-var found = [];
-for (var k in window) {
-  if (/hisense|vidaa|omi_|launch/i.test(k)) found.push(k + ' : ' + typeof window[k]);
-}
-found.sort();
-// Hisense_* functions are not always enumerable; check known names directly.
-['Hisense_installApp', 'Hisense_uninstallApp', 'Hisense_launchApp', 'Hisense_GetBrand',
- 'Hisense_GetModelName', 'Hisense_GetFirmWareVersion', 'Hisense_GetDeviceID'].forEach(function (n) {
-  if (typeof window[n] !== 'undefined' && found.indexOf(n + ' : ' + typeof window[n]) < 0) found.push(n + ' : ' + typeof window[n]);
-});
-// Getters are numerous and unimportant here; list only the action functions.
-var names = found.map(function (n) { return n.split(' : ')[0]; });
-var actions = names.filter(function (n) { return !/^Hisense_Get/.test(n); });
-var getters = names.length - actions.length;
-
-// Look inside the objects that may be VIDAA's native bridge.
-function members(name) {
-  var o = window[name], out = [];
-  if (o === null || o === undefined) return name + ': ' + o;
-  if (typeof o === 'function') {
-    var src = String(o).replace(/\s+/g, ' ');
-    out.push('fn ' + src.slice(0, 240));
-  }
-  var seen = {};
-  for (var p = o; p && p !== Object.prototype && p !== Function.prototype; p = Object.getPrototypeOf(p)) {
-    Object.getOwnPropertyNames(p).forEach(function (k) {
-      if (seen[k] || k === 'constructor' || k === 'prototype' || k === 'length' || k === 'name') return;
-      seen[k] = 1;
-      var t; try { t = typeof o[k]; } catch (e) { t = 'err'; }
-      out.push(k + (t === 'function' ? '()' : ':' + t));
-    });
-  }
-  return name + ' -> ' + (out.length ? out.join(', ') : '(no members)');
-}
-
-// How the Hisense_* wrappers talk to the bridge: show one example, plus every
-// distinct string literal across all of them (the message vocabulary).
-function src(n) { try { return String(window[n]).replace(/\s+/g, ' '); } catch (e) { return ''; } }
-var vocab = {};
-names.forEach(function (n) {
-  (src(n).match(/['"][A-Za-z_.\/:]{3,48}['"]/g) || []).forEach(function (s) { vocab[s.slice(1, -1)] = 1; });
-});
-var example = src('Hisense_SetVolume');
+// Every global the TV injects: compare against a clean iframe's window.
+var frame = document.createElement('iframe');
+frame.style.display = 'none';
+document.body.appendChild(frame);
+var stock = {};
+Object.getOwnPropertyNames(frame.contentWindow).forEach(function (k) { stock[k] = 1; });
+var injected = Object.getOwnPropertyNames(window).filter(function (k) {
+  return !stock[k] && !/^(methods|NETFLIX|YOUTUBE|frame|stock|injected|getters|actions|platformEvents|row|buttons|run|keyLog|auto)$/.test(k);
+}).sort();
+// Getters are numerous and unimportant here; list everything else.
+var getters = injected.filter(function (n) { return /^Hisense_Get/.test(n); }).length;
+var actions = injected.filter(function (n) { return !/^Hisense_Get/.test(n); });
 
 // Remote keys may arrive as platform events instead of DOM key events.
 var platformEvents = [];
@@ -84,14 +55,14 @@ try {
     var a = [].slice.call(arguments).map(function (x) { return typeof x === 'string' ? x : JSON.stringify(x); });
     platformEvents.unshift(a.join(' ').slice(0, 160));
     platformEvents.length = Math.min(platformEvents.length, 4);
-    document.getElementById('keys').textContent = 'Platform events: ' + platformEvents.join('  |  ');
+    document.getElementById('plat').textContent = 'Platform events: ' + platformEvents.join('  |  ');
   });
 } catch (e) { platformEvents.push('listener error ' + e); }
 
 document.getElementById('out').textContent =
-  'SetVolume source: ' + example.slice(0, 420) +
-  '\n\nStrings used by Hisense_* (' + Object.keys(vocab).length + '): ' + Object.keys(vocab).sort().join(', ').slice(0, 1600) +
-  '\n\nUser agent:\n  ' + navigator.userAgent +
+  'Opened at: ' + location.href + '\ninstallApp: ' + (typeof window.Hisense_installApp) +
+  '   installApp_V2: ' + (typeof window.Hisense_installApp_V2) + '   HiUtils_createRequest: ' + (typeof window.HiUtils_createRequest) +
+  '\n\nTV globals (' + actions.length + ' + ' + getters + ' Hisense_Get*): ' + actions.join(', ') +
   '\n\nScreen: ' + screen.width + 'x' + screen.height + '  Window: ' + innerWidth + 'x' + innerHeight;
 
 var row = document.getElementById('buttons');
@@ -105,8 +76,9 @@ var buttons = methods.map(function (m, i) {
 buttons[0].focus();
 
 function run(i) {
-  document.getElementById('status').textContent = 'Trying ' + (i + 1) + '. ' + methods[i][0] + ' ...';
-  try { methods[i][1](); } catch (e) { document.getElementById('status').textContent = 'Method ' + (i + 1) + ' threw: ' + e; }
+  var r = document.getElementById('result');
+  r.textContent = 'Trying ' + (i + 1) + '. ' + methods[i][0] + ' ...';
+  try { methods[i][1](); } catch (e) { r.textContent = 'Method ' + (i + 1) + ' threw: ' + e; }
 }
 
 // Diagnostic: show every key event the page gets, and where focus is.
@@ -128,6 +100,7 @@ document.addEventListener('keydown', function (e) {
   var at = buttons.indexOf(document.activeElement);
   if (e.keyCode === 39) buttons[Math.min(at + 1, buttons.length - 1)].focus();
   if (e.keyCode === 37) buttons[Math.max(at - 1, 0)].focus();
+  if (e.keyCode === 13 && at >= 0) { e.preventDefault(); run(at); }
 });
 
 var auto = /[?&]m=(\d+)/.exec(location.search);
