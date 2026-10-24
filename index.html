@@ -68,10 +68,29 @@ function members(name) {
   return name + ' -> ' + (out.length ? out.join(', ') : '(no members)');
 }
 
+// How the Hisense_* wrappers talk to the bridge: show one example, plus every
+// distinct string literal across all of them (the message vocabulary).
+function src(n) { try { return String(window[n]).replace(/\s+/g, ' '); } catch (e) { return ''; } }
+var vocab = {};
+names.forEach(function (n) {
+  (src(n).match(/['"][A-Za-z_.\/:]{3,48}['"]/g) || []).forEach(function (s) { vocab[s.slice(1, -1)] = 1; });
+});
+var example = src('Hisense_SetVolume');
+
+// Remote keys may arrive as platform events instead of DOM key events.
+var platformEvents = [];
+try {
+  omi_platform.addPlatformEventListener(function () {
+    var a = [].slice.call(arguments).map(function (x) { return typeof x === 'string' ? x : JSON.stringify(x); });
+    platformEvents.unshift(a.join(' ').slice(0, 160));
+    platformEvents.length = Math.min(platformEvents.length, 4);
+    document.getElementById('keys').textContent = 'Platform events: ' + platformEvents.join('  |  ');
+  });
+} catch (e) { platformEvents.push('listener error ' + e); }
+
 document.getElementById('out').textContent =
-  members('omi_platform') + '\n\n' + members('Hisense') + '\n\n' + members('CSLaunchCallback') +
-  '\n\n' + members('Hisense_SupportAppConfig') + '\n\n' + members('Hisense_SetRemoteKeyboard') +
-  '\n\n(' + actions.length + ' action + ' + getters + ' Hisense_Get* functions)' +
+  'SetVolume source: ' + example.slice(0, 420) +
+  '\n\nStrings used by Hisense_* (' + Object.keys(vocab).length + '): ' + Object.keys(vocab).sort().join(', ').slice(0, 1600) +
   '\n\nUser agent:\n  ' + navigator.userAgent +
   '\n\nScreen: ' + screen.width + 'x' + screen.height + '  Window: ' + innerWidth + 'x' + innerHeight;
 
