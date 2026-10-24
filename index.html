@@ -104,7 +104,14 @@ document.addEventListener('keydown', function (e) {
 });
 
 // ?kb=1: send text to connected remote apps, to test it as a page -> Mac channel.
-if (/[?&]kb=1/.test(location.search)) {
+if (/[?&]kb=[12]/.test(location.search)) {
+  if (/[?&]kb=2/.test(location.search)) {
+    // Variant: focus a text box and enable the virtual keyboard first.
+    var box = document.createElement('input');
+    document.body.appendChild(box);
+    box.focus();
+    try { document.getElementById('plat').textContent = 'enableVKB -> ' + Hisense_enableVKB(); } catch (e) {}
+  }
   var sent = 0, kbTimer = setInterval(function () {
     var r;
     try { r = Hisense_SetRemoteKeyboard('tvlauncher:ping' + (++sent)); } catch (e) { r = 'threw ' + e; }
